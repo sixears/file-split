@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes       #-}
 
 import Prelude ( error )
 
@@ -11,19 +12,25 @@ import Control.Monad           ( Monad, (>>=), join, return )
 import Control.Monad.IO.Class  ( MonadIO, liftIO )
 import Data.Bifunctor          ( first )
 import Data.Either             ( Either( Left, Right ), either )
+import Data.Eq                 ( Eq, (/=) )
 import Data.Function           ( (.), ($) )
 import Data.Functor            ( (<$>), fmap )
-import Data.Maybe              ( fromMaybe )
+import Data.List               ( filter, sort )
+import Data.Maybe              ( Maybe( Just, Nothing ), fromMaybe, isJust )
 import Data.Monoid             ( (<>) )
 import Data.String             ( String )
 import System.IO               ( FilePath, IO )
 import System.IO.Error         ( catchIOError )
 import Text.Show               ( Show, show )
 
+-- containers --------------------------
+
+import Data.Map  ( fromList )
+
 -- directory ---------------------------
 
-import System.Directory  ( getTemporaryDirectory, removeDirectoryRecursive
-                         , withCurrentDirectory )
+import System.Directory  ( getTemporaryDirectory, listDirectory
+                         , removeDirectoryRecursive, withCurrentDirectory )
 
 -- lens --------------------------------
 
@@ -38,15 +45,20 @@ import Control.Monad.Except  ( ExceptT, MonadError, runExceptT, throwError )
 
 import qualified  Path
 
-import Path  ( Abs, Dir, Path, PathException, toFilePath )
+import Path  ( Abs, Dir, Path, PathException, relfile, toFilePath )
 
 -- tasty -------------------------------
 
-import Test.Tasty  ( TestTree, defaultMain, testGroup )
+import Test.Tasty  ( TestName, TestTree, defaultMain, testGroup )
+
+-- tasty-hunit -------------------------
+
+import Test.Tasty.HUnit  ( assertBool, assertEqual, testCase )
 
 -- text --------------------------------
 
-import Data.Text  ( unlines )
+import Data.Text     ( lines, unlines )
+import Data.Text.IO  ( readFile )
 
 -- unix --------------------------------
 
@@ -56,13 +68,9 @@ import System.Posix.Temp   ( mkdtemp )
 --                     local imports                      --
 ------------------------------------------------------------
 
--- import qualified  Text.T.Fmt  as  Fmt
+import FileSplit ( parse, parse', fileSplit )
 
 -------------------------------------------------------------------------------
-
-text1 = unlines [ "---- foo", "my test text", "--------" ]
-
-----------------------------------------
 
 ioMonadError :: (MonadIO μ, MonadError IOException η) => IO α -> μ (η α)
 ioMonadError io = liftIO $ catchIOError (return <$> io) (return . throwError)
@@ -77,6 +85,7 @@ mapMError :: (MonadError β η) => (α -> β) -> Either α x -> η x
 mapMError f = fromRight . first f
 
 data PathError = PathErr { unPathErr :: PathException }
+  deriving Eq
 
 instance Show PathError where
   show (PathErr e) = show e
@@ -84,6 +93,7 @@ instance Show PathError where
 instance Exception PathError
 
 data IOPathError = IOPIOError IOException | IOPPathError PathError
+  deriving (Eq, Show)
 
 toIOPathError :: MonadError IOPathError η =>
                  Either IOException (Either PathError α) -> η α
@@ -116,7 +126,6 @@ splitMError f = either throwError return <$> runExceptT f
 (##) :: AReview t s -> s -> t
 x ## y = y ^. re x
 
--- pathError :: (AsPathError e, Printable τ) => Text -> τ -> SomeException -> e
 pathError :: String -> String -> SomeException -> PathError
 pathError funcname fn e = PathErr $ fromMaybe err (fromException e)
   where err = error $ "PathError '" <> show e <> "' from " <> funcname
@@ -133,19 +142,6 @@ parseAbsDir fn = mapMError (pathError "parseAbsDir" fn) $ Path.parseAbsDir fn
 getTempDir :: (MonadIO μ, MonadError IOPathError η)=> μ (η (Path Abs Dir))
 getTempDir = let go = ioMonadError getTemporaryDirectory >>= (parseAbsDir <$>)
               in toIOPathError <$> splitMError go
-
-{-
--- | create a unique temporary directory under TMPDIR, and return its name
-mkTempDir :: (MonadIO μ, AsPathError ε, AsIOError ε, MonadError ε μ) =>
-             μ (Path Abs Dir)
-mkTempDir = do
-  tmp    <- getTempDir
-  case tmp of
-    Left iop -> throwError iop
-    Right t  -> return $  mkdtemp (toFilePath tmp)
-  tmpDir <- asIOError $
-  parseAbsDir tmpDir
--}
 
 mkTempSubDir :: (MonadIO m, MonadError IOPathError m) =>
                 Path Abs Dir -> m (Path Abs Dir)
@@ -189,4 +185,81 @@ main :: IO ()
 main = defaultMain tests
 
 tests :: TestTree
-tests = testGroup "file-split" [  ]
+tests =
+  let inTempD :: (MonadIO μ, MonadError IOPathError η) => IO α -> μ (η α)
+      inTempD =  splitMError. inTempDir . liftIO
+      testIO  :: (Show α, Eq α) => TestName -> α -> IO α -> TestTree
+      testIO name expect io =
+                 testCase name $ inTempD io >>= assertEqual name (Right expect)
+      text1  = unlines [ "---- foo"
+                       , "great uncle bulgaria"
+                       , "madame cholet"
+                       , "--------"
+                       , "---- bar", "orinoco", "tomsk"
+                       , "--------"
+                       , "---- quux"
+                       , "--------"                       
+                       ]
+
+      suffixFailures = let testFail name text = testIO name [] $ do
+                             r <- parse' "---- " (Just "--------")
+                                         (unlines text)
+                             assertBool name (isJust r)
+                             listDirectory "."
+                        in testGroup "suffixFailures"
+                                 [ testFail "file without content"
+                                            [ "---- foo" ]
+                                 , testFail "files without content"
+                                            [ "---- foo", "---- bar" ]
+                                 , testFail "file without suffix"
+                                            [ "---- foo", "greatunclebulgaria" ]
+                                 , testFail "infix file without terminator"
+                                            [ "---- foo", "---- bar"
+                                            , "--------" ]
+                                 , testFail "infix file without name"
+                                            [ "---- foo", "--------"
+                                            , "--------" ]
+                                 ] 
+               
+   in testGroup "file-split"
+            [ testCase "empty parse success" $
+                let expect =  fromList []
+                 in assertEqual "parse" (Right $ expect) $
+                        parse "---- " (Just "--------") ""
+
+            , testCase "parse success" $
+                let expect =  fromList [ ([relfile|foo|],
+                                            [ "great uncle bulgaria"
+                                            , "madame cholet"
+                                            ])
+                                       , ([relfile|bar|], ["orinoco", "tomsk"])
+                                       , ([relfile|quux|], [])
+                                       ]
+                 in assertEqual "parse" (Right $ expect) $
+                        parse "---- " (Just "--------") text1
+
+            , suffixFailures
+            , testIO "empty dir" [] (listDirectory ".")
+            , testIO "parse'" ["bar", "foo", "quux"] $ do
+                r <- parse' "---- " (Just "--------") text1
+                assertEqual "split OK" Nothing r
+                readFile "bar" >>= assertEqual "file: bar"
+                                               (unlines [ "orinoco", "tomsk" ])
+                readFile "foo" >>= assertEqual "file: foo"
+                                               (unlines [ "great uncle bulgaria"
+                                                        , "madame cholet" ])
+                readFile "quux" >>= assertEqual "file: quux" ""
+                sort <$> listDirectory "."
+            , testIO "parse'" ["bar", "foo", "quux"] $ do
+                r <- parse' "---- " Nothing
+                                    (unlines (filter (/= "--------") $
+                                              lines text1))
+                assertEqual "split OK" Nothing r
+                readFile "bar" >>= assertEqual "file: bar"
+                                               (unlines [ "orinoco", "tomsk" ])
+                readFile "foo" >>= assertEqual "file: foo"
+                                               (unlines [ "great uncle bulgaria"
+                                                        , "madame cholet" ])
+                readFile "quux" >>= assertEqual "file: quux" ""
+                sort <$> listDirectory "."
+            ]

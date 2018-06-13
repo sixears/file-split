@@ -47,22 +47,22 @@ cabal-version:       >=1.10
 
 
 library
-  ghc-options:     -W -Wall -fhelpful-errors
+  ghc-options:         -W -Wall -fhelpful-errors
   -- Modules exported by the library.
-  exposed-modules: 
+  exposed-modules:     FileSplit
 
   -- modules included in this library but not exported.
   other-modules:  
 
-  default-extensions: NoImplicitPrelude
+  default-extensions:  NoImplicitPrelude
   -- LANGUAGE extensions used by modules in this package.
   -- other-extensions:
 
   -- Other library packages from which modules are imported.
-  build-depends:       base
+  build-depends:       base, containers, path, text
 
   -- Directories containing source files.
-  -- hs-source-dirs:      src
+  hs-source-dirs:      src
 
   -- Base language which the package is written in.
   default-language:    Haskell2010
@@ -76,8 +76,9 @@ executable file-split
   -- add ?RTS -xt -hy to produce a usage graph
   main-is:             file-split.hs
   hs-source-dirs:      bin
-  build-depends:       base, data-textual, lens, optparse-applicative, split
-                     , text
+  build-depends:       base, lens, optparse-applicative, text
+
+                     , file-split
   default-extensions:  NoImplicitPrelude
   default-language:    Haskell2010
 
@@ -92,7 +93,8 @@ test-suite file-split-test
   main-is:             file-split.hs
   hs-source-dirs:      t
   build-depends:       file-split
-                     , base, directory, lens, mtl, path, tasty, text, unix
+                     , base, containers, directory, lens, mtl, path, tasty
+                     , tasty-hunit, text, unix
   default-language:    Haskell2010
 
 
