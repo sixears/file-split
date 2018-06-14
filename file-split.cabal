@@ -93,7 +93,7 @@ test-suite file-split-test
   main-is:             file-split.hs
   hs-source-dirs:      t
   build-depends:       file-split
-                     , base, containers, directory, lens, mtl, path, tasty
+                     , base, containers, directory, mtl, path, tasty
                      , tasty-hunit, text, unix
   default-language:    Haskell2010
 

@@ -32,11 +32,6 @@ import Data.Map  ( fromList )
 import System.Directory  ( getTemporaryDirectory, listDirectory
                          , removeDirectoryRecursive, withCurrentDirectory )
 
--- lens --------------------------------
-
-import Control.Lens.Getter  ( (^.) )
-import Control.Lens.Review  ( AReview, re )
-
 -- mtl ---------------------------------
 
 import Control.Monad.Except  ( ExceptT, MonadError, runExceptT, throwError )
@@ -68,7 +63,7 @@ import System.Posix.Temp   ( mkdtemp )
 --                     local imports                      --
 ------------------------------------------------------------
 
-import FileSplit ( parse, parse', fileSplit )
+import FileSplit ( parse, parse' )
 
 -------------------------------------------------------------------------------
 
@@ -84,7 +79,7 @@ fromRight = either throwError return
 mapMError :: (MonadError β η) => (α -> β) -> Either α x -> η x
 mapMError f = fromRight . first f
 
-data PathError = PathErr { unPathErr :: PathException }
+data PathError = PathErr PathException
   deriving Eq
 
 instance Show PathError where
@@ -108,23 +103,6 @@ toIOPathError a = case a of
 --   monad with an ExceptT constraint) and turns it into a layered m' (m ...)
 splitMError :: (MonadError ε η, Monad μ) => ExceptT ε μ a -> μ (η a)
 splitMError f = either throwError return <$> runExceptT f
-
-
-
--- | Easy fn to make classy values for options using prisms.
---   Given a lens x (presumed to be a Prism', where the first type value might
---   well be constrained unto a class), and a value y,
---   construct a value y of type suitable to the prism.
---
---   It maybe be useful to recall that AReview is a generalization of Prism',
---   so (##) matches the slightly stricter typing:
---
---   @
---     (##) :: Prism' t s -> s -> t
---   @
-
-(##) :: AReview t s -> s -> t
-x ## y = y ^. re x
 
 pathError :: String -> String -> SomeException -> PathError
 pathError funcname fn e = PathErr $ fromMaybe err (fromException e)

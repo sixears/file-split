@@ -5,11 +5,12 @@ import Prelude ( )
 
 -- base --------------------------------
 
-import Control.Applicative     ( (<**>), (<*>) )
+import Control.Applicative     ( (<**>), (<*>), optional )
 import Control.Monad           ( (>>=) )
 import Control.Monad.IO.Class  ( MonadIO, liftIO )
 import Data.Function           ( (.), ($) )
 import Data.Functor            ( (<$>) )
+import Data.Maybe              ( Maybe )
 import Data.Monoid             ( (<>) )
 import System.Exit             ( exitWith )
 import System.IO               ( IO )
@@ -62,19 +63,21 @@ textArgument = strArgument
 
 ------------------------------------------------------------
 
-data Options = Options { _splitPfx :: Text, _splitSfx :: Text }
+data Options = Options { _splitPfx :: Text, _splitSfx :: Maybe Text }
 
 $( makeLenses ''Options )
 
 options :: Parser Options
-options =  (Options <$> textArgument (help "prefix for filename strings")
-                    <*> textArgument (help "line format for end-of-file line"))
+options =  let prefixHelp = help "prefix for filename strings"
+               suffixHelp = help "line format for end-of-file line"
+            in (Options <$> textArgument prefixHelp
+                        <*> optional (textArgument suffixHelp))
 
 ------------------------------------------------------------
 
 main :: IO ()
 main = do
   opts <- optParser "write files per stdin instructions" options
-  getContents >>= fileSplit (opts ^. splitPfx) (opts ^. splitSfx)
+  getContents >>= fileSplit (opts ^. splitPfx) (opts ^. splitSfx) >>= exitWith
 
 -- that's all, folks! ----------------------------------------------------------
