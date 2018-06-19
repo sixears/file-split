@@ -65,6 +65,7 @@ import System.Posix.Files  ( fileAccess, fileExist )
 --------------------------------------------------------------------------------
 
 data FileOverwrite = NoFileOverwrite | FileOverwrite
+  deriving Eq
 data MakeDirs      = NoMakeDirs | MakeDirs | MakePaths
   deriving Eq
 
@@ -116,13 +117,16 @@ noCreateE :: Path Rel Dir -> Text
 noCreateE = quoteF "not creating dir"
 
 mfail :: Monad η => Text -> Path β τ -> η (Maybe Error)
-mfail m t = return (Just $ m <> " «" <> (pack (show t)) <> "»")
+mfail m f = return (Just $ quoteF m f)
 
 cannotWriteDirMME :: Monad η => Path β Dir -> η (Maybe Error)
 cannotWriteDirMME = mfail "cannot write to dir"
 
 cannotWriteFileMME :: Monad η => Path β File -> η (Maybe Error)
 cannotWriteFileMME = mfail "cannot write to file"
+
+willNotWriteFileMME :: Monad η => Path β File -> η (Maybe Error)
+willNotWriteFileMME = mfail "will not write to file"
 
 cannotCreateDirMME :: Monad η => Path β Dir -> η (Maybe Error)
 cannotCreateDirMME = mfail "cannot create dir"
@@ -226,39 +230,34 @@ dirIsWriteable fn = do
   if fexist
   -- fn exists and is writable and executable
   then do access <- fileAccess (toFilePath fn) False True True
-          bool (cannotWriteDirMME fn)
-               (return Nothing)
-               access
+          bool (cannotWriteDirMME fn) (return Nothing) access
   else if hasParent fn
        -- fn doesn't exist, parent is ./
        then do access <- fileAccess "." False True True
-               bool (cannotCreateDirMME fn)
-                    (return Nothing)
-                    access
+               bool (cannotCreateDirMME fn) (return Nothing) access
        -- fn doesn't exist, parent isn't ./
        else dirIsWriteable (parent fn)
 
 -- | can we write this filename (per filesystem)
-fileIsWriteable :: FileName -> IO (Maybe Error)
-fileIsWriteable fn = do
+fileIsWriteable :: Bool -> FileName -> IO (Maybe Error)
+fileIsWriteable overwr fn = do
   fexist <- fileExist (toFilePath fn)
   if fexist
   -- fn exists and is writable
-  then do access <- fileAccess (toFilePath fn) False False True
-          bool (cannotWriteFileMME fn)
-               (return Nothing)
-               access
+  then if overwr
+       then do access <- fileAccess (toFilePath fn) False True False
+               bool (cannotWriteFileMME fn) (return Nothing) access
+       else willNotWriteFileMME fn
   else if hasParent fn
        -- fn doesn't exist, is ./
        then do access <- fileAccess "." False True True
-               bool (cannotCreateFileMME fn)
-                    (return Nothing)
-                    access
+               bool (cannotCreateFileMME fn) (return Nothing) access
        -- fn doesn't exist, parent isn't ./
        else dirIsWriteable (parent fn)
 
-filesAreWriteable :: [FileName] -> IO Errors
-filesAreWriteable fns = catMaybes <$> mapM fileIsWriteable fns
+filesAreWriteable :: Bool -> [FileName] -> IO Errors
+filesAreWriteable overwr fns =
+  catMaybes <$> mapM (fileIsWriteable overwr) fns
 
 throwIOErrors :: (MonadIO μ, MonadError [ε] μ) => IO [ε] -> μ ()
 throwIOErrors ioes = do
@@ -318,7 +317,8 @@ parse' :: (MonadIO μ, MonadError Errors μ) =>
           FileSplitOptions -> Text -> Maybe Text -> Text -> μ ()
 parse' opts prefix suffix input = do
   filemap <- join . return $ parseCheck opts prefix suffix input
-  () <- throwIOErrors (filesAreWriteable $ keys filemap)
+  () <- throwIOErrors (filesAreWriteable (overwrite opts == FileOverwrite)
+                                         (keys filemap))
   writeTexts opts filemap
 
 -- | parse input text in light of prefix & suffix, either writing the files

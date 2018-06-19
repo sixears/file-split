@@ -39,7 +39,11 @@ import Data.Text.IO  ( getContents )
 --                     local imports                      --
 ------------------------------------------------------------
 
-import FileSplit ( fileSplit )
+import FileSplit ( FileOverwrite( FileOverwrite, NoFileOverwrite )
+                 , FileSplitOptions( FileSplitOptions )
+                 , MakeDirs( NoMakeDirs, MakeDirs, MakePaths )
+                 , fileSplit
+                 )
 
 --------------------------------------------------------------------------------
 
@@ -82,6 +86,7 @@ options =  let prefixHelp = help "prefix for filename strings"
 main :: IO ()
 main = do
   opts <- optParser "write files per stdin instructions" options
-  getContents >>= fileSplit (opts ^. splitPfx) (opts ^. splitSfx) >>= exitWith
+  getContents >>= fileSplit (FileSplitOptions FileOverwrite MakeDirs)
+                            (opts ^. splitPfx) (opts ^. splitSfx) >>= exitWith
 
 -- that's all, folks! ----------------------------------------------------------

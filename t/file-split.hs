@@ -57,7 +57,7 @@ import Test.Tasty.HUnit  ( assertBool, assertEqual, testCase )
 -- text --------------------------------
 
 import Data.Text     ( lines, unlines )
-import Data.Text.IO  ( readFile )
+import Data.Text.IO  ( readFile, writeFile )
 
 -- unix --------------------------------
 
@@ -67,7 +67,10 @@ import System.Posix.Temp   ( mkdtemp )
 --                     local imports                      --
 ------------------------------------------------------------
 
-import FileSplit ( MakeDirs( MakeDirs, MakePaths ), makeDirs, parse, parse' )
+import FileSplit ( FileOverwrite( FileOverwrite )
+                 , MakeDirs( MakeDirs, MakePaths )
+                 , makeDirs, overwrite, parse, parse'
+                 )
 
 -------------------------------------------------------------------------------
 
@@ -195,6 +198,9 @@ tests =
                        , "--------"
                        ]
 
+      text4  = unlines [ "---- foo"
+                       , "madame cholet"
+                       ]
       suffixFailures = let testFail name text = testIO name [] $ do
                              r <- splitMError $ parse' def "---- "
                                                        (Just "--------")
@@ -277,7 +283,7 @@ tests =
             , testIO "parse' (make dir; request path)" [] $ do
                 r <- splitMError $ parse' def { makeDirs = MakeDirs }
                                           "---- " (Just "--------") text3
-                assertEqual "split OK" (Left ["not creating dir: «bar/baz/»"]) r
+                assertEqual "split fail" (Left ["not creating dir: «bar/baz/»"]) r
                 sort <$> listDirectory "."
             , testIO "parse' (make path)" ["bar", "foo"] $ do
                 r <- splitMError $ parse' def { makeDirs = MakePaths }
@@ -285,6 +291,21 @@ tests =
                 assertEqual "split OK" (Right ()) r
                 readFile "bar/baz/foo" >>= assertEqual "file: bar/baz/foo"
                                                (unlines [ ])
+                readFile "foo" >>= assertEqual "file: foo"
+                                               (unlines [ "madame cholet" ])
+                sort <$> listDirectory "."
+            , testIO "parse' (overwrite fail)" ["foo"] $ do
+                writeFile "foo" "yellowstone\n"
+                r <- splitMError $ parse' def "---- " Nothing text4
+                assertEqual "split fail" (Left ["will not write to file: «foo»"]) r
+                readFile "foo" >>= assertEqual "file: foo"
+                                               (unlines [ "yellowstone" ])
+                sort <$> listDirectory "."
+            , testIO "parse' (overwrite)" ["foo"] $ do
+                writeFile "foo" "yellowstone\n"
+                r <- splitMError $ parse' def { overwrite = FileOverwrite }
+                                          "---- " Nothing text4
+                assertEqual "split OK" (Right ()) r
                 readFile "foo" >>= assertEqual "file: foo"
                                                (unlines [ "madame cholet" ])
                 sort <$> listDirectory "."
