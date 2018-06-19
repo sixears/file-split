@@ -10,7 +10,7 @@ name:                file-split
 -- PVP summary:      +-+------- breaking API changes
 --                   | | +----- non-breaking API additions
 --                   | | | +--- code changes with no API change
-version:             1.0.0.0
+version:             1.0.1.0
 
 -- A short (one-line) description of the package.
 synopsis:            write files from instructions on stdin
@@ -59,7 +59,8 @@ library
   -- other-extensions:
 
   -- Other library packages from which modules are imported.
-  build-depends:       base, containers, path, text
+  build-depends:       base, containers, data-default, directory, mtl, path
+                     , text, unix
 
   -- Directories containing source files.
   hs-source-dirs:      src
@@ -93,7 +94,7 @@ test-suite file-split-test
   main-is:             file-split.hs
   hs-source-dirs:      t
   build-depends:       file-split
-                     , base, containers, directory, mtl, path, tasty
+                     , base, containers, data-default, directory, mtl, path, tasty
                      , tasty-hunit, text, unix
   default-language:    Haskell2010
 

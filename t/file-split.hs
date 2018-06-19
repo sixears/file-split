@@ -11,12 +11,12 @@ import Control.Exception.Base  ( IOException )
 import Control.Monad           ( Monad, (>>=), join, return )
 import Control.Monad.IO.Class  ( MonadIO, liftIO )
 import Data.Bifunctor          ( first )
-import Data.Either             ( Either( Left, Right ), either )
+import Data.Either             ( Either( Left, Right ), either, isLeft )
 import Data.Eq                 ( Eq, (/=) )
 import Data.Function           ( (.), ($) )
 import Data.Functor            ( (<$>), fmap )
 import Data.List               ( filter, sort )
-import Data.Maybe              ( Maybe( Just, Nothing ), fromMaybe, isJust )
+import Data.Maybe              ( Maybe( Just, Nothing ), fromMaybe )
 import Data.Monoid             ( (<>) )
 import Data.String             ( String )
 import System.IO               ( FilePath, IO )
@@ -26,6 +26,10 @@ import Text.Show               ( Show, show )
 -- containers --------------------------
 
 import Data.Map  ( fromList )
+
+-- data-default ------------------------
+
+import Data.Default  ( def )
 
 -- directory ---------------------------
 
@@ -63,7 +67,7 @@ import System.Posix.Temp   ( mkdtemp )
 --                     local imports                      --
 ------------------------------------------------------------
 
-import FileSplit ( parse, parse' )
+import FileSplit ( MakeDirs( MakeDirs, MakePaths ), makeDirs, parse, parse' )
 
 -------------------------------------------------------------------------------
 
@@ -178,11 +182,24 @@ tests =
                        , "---- quux"
                        , "--------"                       
                        ]
+      text2  = unlines [ "---- foo"
+                       , "madame cholet"
+                       , "--------"
+                       , "---- bar/foo"
+                       , "--------"
+                       ]
+      text3  = unlines [ "---- foo"
+                       , "madame cholet"
+                       , "--------"
+                       , "---- bar/baz/foo"
+                       , "--------"
+                       ]
 
       suffixFailures = let testFail name text = testIO name [] $ do
-                             r <- parse' "---- " (Just "--------")
-                                         (unlines text)
-                             assertBool name (isJust r)
+                             r <- splitMError $ parse' def "---- "
+                                                       (Just "--------")
+                                                       (unlines text)
+                             assertBool name (isLeft r)
                              listDirectory "."
                         in testGroup "suffixFailures"
                                  [ testFail "file without content"
@@ -197,6 +214,15 @@ tests =
                                  , testFail "infix file without name"
                                             [ "---- foo", "--------"
                                             , "--------" ]
+                                 , testFail "duplicate file"
+                                            [ "---- foo", "--------"
+                                            , "---- foo", "--------" ]
+                                 , testFail "request dir"
+                                            [ "---- bar/foo", "--------" ]
+                                 , testFail "request path"
+                                            [ "---- bar/baz/foo", "--------" ]
+                                 , testFail "request path (with mkdir)"
+                                            [ "---- bar/baz/foo", "--------" ]
                                  ] 
                
    in testGroup "file-split"
@@ -219,8 +245,8 @@ tests =
             , suffixFailures
             , testIO "empty dir" [] (listDirectory ".")
             , testIO "parse'" ["bar", "foo", "quux"] $ do
-                r <- parse' "---- " (Just "--------") text1
-                assertEqual "split OK" Nothing r
+                r <- splitMError $ parse' def "---- " (Just "--------") text1
+                assertEqual "split OK" (Right ()) r
                 readFile "bar" >>= assertEqual "file: bar"
                                                (unlines [ "orinoco", "tomsk" ])
                 readFile "foo" >>= assertEqual "file: foo"
@@ -228,16 +254,38 @@ tests =
                                                         , "madame cholet" ])
                 readFile "quux" >>= assertEqual "file: quux" ""
                 sort <$> listDirectory "."
-            , testIO "parse'" ["bar", "foo", "quux"] $ do
-                r <- parse' "---- " Nothing
-                                    (unlines (filter (/= "--------") $
-                                              lines text1))
-                assertEqual "split OK" Nothing r
+            , testIO "parse' (no suffix)" ["bar", "foo", "quux"] $ do
+                r <- splitMError $ parse' def "---- " Nothing
+                                          (unlines (filter (/= "--------")
+                                                   (lines text1)))
+                assertEqual "split OK" (Right ()) r
                 readFile "bar" >>= assertEqual "file: bar"
                                                (unlines [ "orinoco", "tomsk" ])
                 readFile "foo" >>= assertEqual "file: foo"
                                                (unlines [ "great uncle bulgaria"
                                                         , "madame cholet" ])
                 readFile "quux" >>= assertEqual "file: quux" ""
+                sort <$> listDirectory "."
+            , testIO "parse' (make dir)" ["bar", "foo"] $ do
+                r <- splitMError $ parse' def { makeDirs = MakeDirs }
+                                          "---- " (Just "--------") text2
+                assertEqual "split OK" (Right ()) r
+                readFile "bar/foo" >>= assertEqual "file: bar" (unlines [ ])
+                readFile "foo" >>= assertEqual "file: foo"
+                                               (unlines [ "madame cholet" ])
+                sort <$> listDirectory "."
+            , testIO "parse' (make dir; request path)" [] $ do
+                r <- splitMError $ parse' def { makeDirs = MakeDirs }
+                                          "---- " (Just "--------") text3
+                assertEqual "split OK" (Left ["not creating dir: «bar/baz/»"]) r
+                sort <$> listDirectory "."
+            , testIO "parse' (make path)" ["bar", "foo"] $ do
+                r <- splitMError $ parse' def { makeDirs = MakePaths }
+                                          "---- " (Just "--------") text3
+                assertEqual "split OK" (Right ()) r
+                readFile "bar/baz/foo" >>= assertEqual "file: bar/baz/foo"
+                                               (unlines [ ])
+                readFile "foo" >>= assertEqual "file: foo"
+                                               (unlines [ "madame cholet" ])
                 sort <$> listDirectory "."
             ]

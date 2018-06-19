@@ -67,6 +67,10 @@ data Options = Options { _splitPfx :: Text, _splitSfx :: Maybe Text }
 
 $( makeLenses ''Options )
 
+-- add -O to overwrite extant files
+-- add -m to make necessary dirs (one level)
+-- add -M to make necessary dirs (multiple levels)
+
 options :: Parser Options
 options =  let prefixHelp = help "prefix for filename strings"
                suffixHelp = help "line format for end-of-file line"
