@@ -8,6 +8,7 @@ import Prelude ( )
 import Control.Applicative     ( (<**>), (<*>), optional )
 import Control.Monad           ( (>>=) )
 import Control.Monad.IO.Class  ( MonadIO, liftIO )
+import Data.Eq                 ( (==) )
 import Data.Function           ( (.), ($) )
 import Data.Functor            ( (<$>) )
 import Data.Maybe              ( Maybe )
@@ -23,9 +24,9 @@ import Control.Lens.TH      ( makeLenses )
 -- optparse-applicative ----------------
 
 import Options.Applicative.Builder  ( ArgumentFields, Mod
-                                    , failureCode, fullDesc, help, info, prefs
-                                    , progDesc, showHelpOnEmpty, showHelpOnError
-                                    , strArgument
+                                    , failureCode, flag, fullDesc, help, info
+                                    , prefs, progDesc, short, showHelpOnEmpty
+                                    , showHelpOnError, strArgument
                                     )
 import Options.Applicative.Extra    ( customExecParser, helper )
 import Options.Applicative.Types    ( Parser, ParserPrefs )
@@ -67,7 +68,12 @@ textArgument = strArgument
 
 ------------------------------------------------------------
 
-data Options = Options { _splitPfx :: Text, _splitSfx :: Maybe Text }
+data Options = Options { _splitPfx  :: Text
+                       , _splitSfx  :: Maybe Text
+                       , _overwrite :: FileOverwrite
+                       , _makeDirs  :: MakeDirs
+                       , _makePaths :: MakeDirs
+                       }
 
 $( makeLenses ''Options )
 
@@ -78,15 +84,26 @@ $( makeLenses ''Options )
 options :: Parser Options
 options =  let prefixHelp = help "prefix for filename strings"
                suffixHelp = help "line format for end-of-file line"
+               mHelp = help "auto-create any directories (up to a depth of 1)"
+               pHelp = help "auto-create any directory paths"
+               oHelp = help "overwrite any extant files"
             in (Options <$> textArgument prefixHelp
-                        <*> optional (textArgument suffixHelp))
+                        <*> optional (textArgument suffixHelp)
+                        <*> flag NoFileOverwrite FileOverwrite
+                                                      (short 'O' <> oHelp)
+                        <*> flag NoMakeDirs MakeDirs  (short 'm' <> mHelp)
+                        <*> flag NoMakeDirs MakePaths (short 'p' <> pHelp)
+               )
 
 ------------------------------------------------------------
 
 main :: IO ()
 main = do
   opts <- optParser "write files per stdin instructions" options
-  getContents >>= fileSplit (FileSplitOptions FileOverwrite MakeDirs)
+  let mkpaths = if opts ^. makePaths == NoMakeDirs
+                then opts ^. makeDirs
+                else opts ^. makePaths
+  getContents >>= fileSplit (FileSplitOptions (opts ^. overwrite) mkpaths)
                             (opts ^. splitPfx) (opts ^. splitSfx) >>= exitWith
 
 -- that's all, folks! ----------------------------------------------------------
