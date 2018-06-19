@@ -25,8 +25,9 @@ import Control.Lens.TH      ( makeLenses )
 
 import Options.Applicative.Builder  ( ArgumentFields, Mod
                                     , failureCode, flag, fullDesc, help, info
-                                    , prefs, progDesc, short, showHelpOnEmpty
-                                    , showHelpOnError, strArgument
+                                    , metavar, prefs, progDesc, short
+                                    , showHelpOnEmpty, showHelpOnError
+                                    , strArgument
                                     )
 import Options.Applicative.Extra    ( customExecParser, helper )
 import Options.Applicative.Types    ( Parser, ParserPrefs )
@@ -83,7 +84,9 @@ $( makeLenses ''Options )
 
 options :: Parser Options
 options =  let prefixHelp = help "prefix for filename strings"
+                         <> metavar "PREFIX"
                suffixHelp = help "line format for end-of-file line"
+                         <> metavar "SUFFIX"
                mHelp = help "auto-create any directories (up to a depth of 1)"
                pHelp = help "auto-create any directory paths"
                oHelp = help "overwrite any extant files"
