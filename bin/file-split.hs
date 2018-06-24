@@ -44,6 +44,7 @@ import Data.Text.IO  ( getContents )
 import FileSplit ( FileOverwrite( FileOverwrite, NoFileOverwrite )
                  , FileSplitOptions( FileSplitOptions )
                  , MakeDirs( NoMakeDirs, MakeDirs, MakePaths )
+                 , Verbosity( NoVerbose, Verbose )
                  , fileSplit
                  )
 
@@ -74,6 +75,7 @@ data Options = Options { _splitPfx  :: Text
                        , _overwrite :: FileOverwrite
                        , _makeDirs  :: MakeDirs
                        , _makePaths :: MakeDirs
+                       , _verbosity :: Verbosity
                        }
 
 $( makeLenses ''Options )
@@ -90,12 +92,14 @@ options =  let prefixHelp = help "prefix for filename strings"
                mHelp = help "auto-create any directories (up to a depth of 1)"
                pHelp = help "auto-create any directory paths"
                oHelp = help "overwrite any extant files"
+               vHelp = help "inform of file creation on stderr"
             in (Options <$> textArgument prefixHelp
                         <*> optional (textArgument suffixHelp)
                         <*> flag NoFileOverwrite FileOverwrite
                                                       (short 'O' <> oHelp)
                         <*> flag NoMakeDirs MakeDirs  (short 'm' <> mHelp)
                         <*> flag NoMakeDirs MakePaths (short 'p' <> pHelp)
+                        <*> flag NoVerbose  Verbose   (short 'v' <> vHelp)
                )
 
 ------------------------------------------------------------
@@ -106,7 +110,8 @@ main = do
   let mkpaths = if opts ^. makePaths == NoMakeDirs
                 then opts ^. makeDirs
                 else opts ^. makePaths
-  getContents >>= fileSplit (FileSplitOptions (opts ^. overwrite) mkpaths)
-                            (opts ^. splitPfx) (opts ^. splitSfx) >>= exitWith
+      fsopts  = FileSplitOptions (opts ^. verbosity) (opts ^. overwrite) mkpaths
+  getContents >>= fileSplit fsopts (opts ^. splitPfx) (opts ^. splitSfx)
+              >>= exitWith
 
 -- that's all, folks! ----------------------------------------------------------

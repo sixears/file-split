@@ -7,7 +7,7 @@
 {-# LANGUAGE TemplateHaskell   #-}
 
 module FileSplit
-  ( FileOverwrite(..), FileSplitOptions(..), MakeDirs(..)
+  ( FileOverwrite(..), FileSplitOptions(..), MakeDirs(..), Verbosity(..)
   , parse, parse', fileSplit
   )
 where
@@ -28,7 +28,7 @@ import Data.List               ( reverse )
 import Data.Maybe              ( Maybe( Just, Nothing ), catMaybes )
 import Data.Monoid             ( (<>) )
 import System.Exit             ( ExitCode( ExitFailure,ExitSuccess ) )
-import System.IO               ( IO , stderr )
+import System.IO               ( IO, stderr )
 import Text.Show               ( show )
 
 -- containers --------------------------
@@ -68,13 +68,16 @@ data FileOverwrite = NoFileOverwrite | FileOverwrite
   deriving Eq
 data MakeDirs      = NoMakeDirs | MakeDirs | MakePaths
   deriving Eq
+data Verbosity     = NoVerbose | Verbose
+  deriving Eq
 
-data FileSplitOptions = FileSplitOptions { overwrite :: FileOverwrite
+data FileSplitOptions = FileSplitOptions { verbosity :: Verbosity
+                                         , overwrite :: FileOverwrite
                                          , makeDirs  :: MakeDirs
                                          }
 
 instance Default FileSplitOptions where
-  def = FileSplitOptions NoFileOverwrite NoMakeDirs
+  def = FileSplitOptions NoVerbose NoFileOverwrite NoMakeDirs
 
 ------------------------------------------------------------
 
@@ -305,6 +308,7 @@ writeText opts fn ls = liftIO $ do
   when (hasParent fn && makeDirs opts /= NoMakeDirs) $
     createDirectoryIfMissing (makeDirs opts == MakePaths)
                              (toFilePath $ parent fn)
+  when (verbosity opts == Verbose) (hPutStrLn stderr $ quoteF "writing file" fn)
   writeFile (toFilePath fn) (unlines ls)
 
 writeTexts :: MonadIO μ => FileSplitOptions -> FileMap -> μ ()
