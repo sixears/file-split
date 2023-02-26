@@ -44,7 +44,7 @@ import Control.Monad.Except  ( ExceptT, MonadError, runExceptT, throwError )
 
 import qualified  Path
 
-import Path  ( Abs, Dir, Path, PathException, relfile, toFilePath )
+import Path  ( Abs, Dir, File, Path, PathException, Rel, relfile, toFilePath )
 
 -- tasty -------------------------------
 
@@ -183,7 +183,7 @@ tests =
                        , "---- bar", "orinoco", "tomsk"
                        , "--------"
                        , "---- quux"
-                       , "--------"                       
+                       , "--------"
                        ]
       text2  = unlines [ "---- foo"
                        , "madame cholet"
@@ -229,8 +229,8 @@ tests =
                                             [ "---- bar/baz/foo", "--------" ]
                                  , testFail "request path (with mkdir)"
                                             [ "---- bar/baz/foo", "--------" ]
-                                 ] 
-               
+                                 ]
+
    in testGroup "file-split"
             [ testCase "empty parse success" $
                 let expect =  fromList []
