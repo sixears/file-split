@@ -21,3 +21,4 @@ ghc-mod.package-db-stack
 *.dyn_hi
 *.dyn_o
 default.nix
+result
